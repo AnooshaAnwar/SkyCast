@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 void main() {
@@ -34,15 +33,19 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF2F8FF),
+        titleSpacing: 16,
         title: const Row(
           children: [
             Icon(Icons.cloud, color: Color(0xFF3198E8)),
             SizedBox(width: 8),
-            Text(
-              'SkyCast',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF226CA8),
+            Flexible(
+              child: Text(
+                'SkyCast',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF226CA8),
+                ),
               ),
             ),
           ],
@@ -63,10 +66,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               const Text(
                 'Weather Forecast',
-                style: TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 6),
@@ -78,7 +78,6 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 24),
 
-              // Search field
               TextField(
                 decoration: InputDecoration(
                   hintText: 'Search city...',
@@ -94,16 +93,12 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 25),
 
-              // Current weather card
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF55B4F5),
-                      Color(0xFF267AC7),
-                    ],
+                    colors: [Color(0xFF55B4F5), Color(0xFF267AC7)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -122,11 +117,7 @@ class HomeScreen extends StatelessWidget {
 
                     SizedBox(height: 15),
 
-                    Icon(
-                      Icons.wb_sunny_rounded,
-                      size: 75,
-                      color: Colors.white,
-                    ),
+                    Icon(Icons.wb_sunny_rounded, size: 75, color: Colors.white),
 
                     SizedBox(height: 10),
 
@@ -141,17 +132,13 @@ class HomeScreen extends StatelessWidget {
 
                     Text(
                       'Weather data coming soon',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                      ),
+                      style: TextStyle(color: Colors.white, fontSize: 15),
                     ),
 
                     SizedBox(height: 20),
 
                     Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceAround,
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         WeatherDetail(
                           icon: Icons.water_drop,
@@ -171,13 +158,9 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 28),
 
-              // Forecast section
               const Text(
                 '7-Day Forecast',
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 12),
@@ -199,10 +182,7 @@ class HomeScreen extends StatelessWidget {
                     SizedBox(height: 10),
                     Text(
                       'Forecast will appear here',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 15,
-                      ),
+                      style: TextStyle(color: Colors.grey, fontSize: 15),
                     ),
                   ],
                 ),
@@ -210,13 +190,9 @@ class HomeScreen extends StatelessWidget {
 
               const SizedBox(height: 25),
 
-              // Favorites section
               const Text(
                 'Favorite Cities',
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 12),
@@ -230,14 +206,13 @@ class HomeScreen extends StatelessWidget {
                 ),
                 child: const Row(
                   children: [
-                    Icon(
-                      Icons.favorite_border,
-                      color: Color(0xFF3198E8),
-                    ),
+                    Icon(Icons.favorite_border, color: Color(0xFF3198E8)),
                     SizedBox(width: 12),
-                    Text(
-                      'Your favorite cities will appear here',
-                      style: TextStyle(color: Colors.grey),
+                    Expanded(
+                      child: Text(
+                        'Your favorite cities will appear here',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ),
                   ],
                 ),
@@ -255,10 +230,7 @@ class HomeScreen extends StatelessWidget {
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.search),
-            label: 'Search',
-          ),
+          NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
           NavigationDestination(
             icon: Icon(Icons.favorite_border),
             label: 'Favorites',
@@ -287,10 +259,7 @@ class WeatherDetail extends StatelessWidget {
       children: [
         Icon(icon, color: Colors.white, size: 25),
         const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white),
-        ),
+        Text(label, style: const TextStyle(color: Colors.white)),
         Text(
           value,
           style: const TextStyle(
