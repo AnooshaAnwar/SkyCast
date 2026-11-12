@@ -4,6 +4,8 @@ import 'models/location_model.dart';
 import 'models/weather_model.dart';
 import 'models/forecast_model.dart';
 import 'services/weather_service.dart';
+import 'services/local_storage_service.dart';
+import 'screens/favorites_screen.dart';
 
 void main() {
   runApp(const SkyCastApp());
@@ -39,18 +41,24 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final WeatherService _weatherService = WeatherService();
+  final LocalStorageService _storageService = LocalStorageService();
   final TextEditingController _searchController = TextEditingController();
 
   LocationModel? _location;
   WeatherModel? _currentWeather;
   List<ForecastModel> _forecast = [];
+  List<LocationModel> _favoriteCities = [];
 
   bool _isLoading = false;
+  bool _isShowingCache = false;
+
+  DateTime? _cachedAt;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _loadFavorites();
     _searchCity('Peshawar');
   }
 
@@ -58,6 +66,84 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadFavorites() async {
+    final cities = await _storageService.getFavoriteCities();
+
+    if (!mounted) return;
+
+    setState(() {
+      _favoriteCities = cities;
+    });
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_location == null) return;
+
+    final exists = _favoriteCities.any(
+      (city) =>
+          city.name.toLowerCase() == _location!.name.toLowerCase() &&
+          city.country.toLowerCase() == _location!.country.toLowerCase(),
+    );
+
+    if (exists) {
+      await _storageService.removeFavoriteCity(_location!);
+    } else {
+      await _storageService.addFavoriteCity(_location!);
+    }
+
+    await _loadFavorites();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(exists ? 'Removed from favorites' : 'Added to favorites'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _openFavorites() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FavoritesScreen(
+          favoriteCities: _favoriteCities,
+          onCitySelected: (city) {
+            Navigator.pop(context);
+            _searchCity(city.name);
+          },
+          onRemove: (city) async {
+            await _storageService.removeFavoriteCity(city);
+            await _loadFavorites();
+          },
+        ),
+      ),
+    );
+
+    await _loadFavorites();
+  }
+
+  bool _isConnectivityError(Object error) {
+    final message = error.toString().toLowerCase();
+
+    // Invalid city names should show their own error,
+    // rather than loading an unrelated cached city.
+    if (message.contains('city not found') ||
+        message.contains('please enter a city')) {
+      return false;
+    }
+
+    return message.contains('network') ||
+        message.contains('timeout') ||
+        message.contains('connection') ||
+        message.contains('socket') ||
+        message.contains('host lookup') ||
+        message.contains('unable to search') ||
+        message.contains('unable to load') ||
+        message.contains('failed host');
   }
 
   Future<void> _searchCity(String city) async {
@@ -74,17 +160,58 @@ class _HomeScreenState extends State<HomeScreen> {
       final location = await _weatherService.searchCity(city.trim());
       final weatherData = await _weatherService.getWeather(location);
 
+      final current = weatherData['current'] as WeatherModel;
+      final forecast = weatherData['forecast'] as List<ForecastModel>;
+
+      // Save the latest successful weather data locally.
+      await _storageService.saveWeatherCache(
+        location: location,
+        current: current,
+        forecast: forecast,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _location = location;
-        _currentWeather = weatherData['current'] as WeatherModel;
-        _forecast = weatherData['forecast'] as List<ForecastModel>;
+        _currentWeather = current;
+        _forecast = forecast;
+        _cachedAt = DateTime.now();
+        _isShowingCache = false;
         _isLoading = false;
+        _errorMessage = null;
       });
 
       _searchController.clear();
     } catch (error) {
+      if (!mounted) return;
+
+      // If the request failed because of connectivity,
+      // try to load the last successfully saved forecast.
+      if (_isConnectivityError(error)) {
+        try {
+          final cachedData = await _storageService.getWeatherCache();
+
+          if (!mounted) return;
+
+          if (cachedData != null) {
+            setState(() {
+              _location = cachedData['location'] as LocationModel;
+              _currentWeather = cachedData['current'] as WeatherModel;
+              _forecast = cachedData['forecast'] as List<ForecastModel>;
+              _cachedAt = cachedData['cachedAt'] as DateTime;
+              _isShowingCache = true;
+              _isLoading = false;
+              _errorMessage = null;
+            });
+
+            return;
+          }
+        } catch (_) {
+          // Show the original request error if cache loading fails.
+        }
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -92,6 +219,16 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  String _formatLastUpdated(DateTime dateTime) {
+    final date = dateTime.toLocal();
+
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+
+    return '${date.day}/${date.month}/${date.year} at $hour:$minute $period';
   }
 
   String _weatherDescription(int code) {
@@ -137,6 +274,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return days[parsedDate.weekday - 1];
   }
 
+  bool get _isFavorite {
+    if (_location == null) return false;
+
+    return _favoriteCities.any(
+      (city) =>
+          city.name.toLowerCase() == _location!.name.toLowerCase() &&
+          city.country.toLowerCase() == _location!.country.toLowerCase(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,6 +303,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            onPressed: _openFavorites,
+            tooltip: 'Favorite cities',
+            icon: const Icon(Icons.favorite, color: Colors.red),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -174,7 +328,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 24),
 
-              // City search
               TextField(
                 controller: _searchController,
                 textInputAction: TextInputAction.search,
@@ -232,7 +385,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
 
               if (!_isLoading && _currentWeather != null) ...[
-                // Current weather card
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -246,15 +398,54 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Column(
                     children: [
-                      Text(
-                        '${_location!.name}, ${_location!.country}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 21,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${_location!.name}, ${_location!.country}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 21,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _toggleFavorite,
+                            icon: Icon(
+                              _isFavorite
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: Colors.white,
+                            ),
+                            tooltip: 'Toggle favorite',
+                          ),
+                        ],
                       ),
+
+                      // Offline cache indicator.
+                      if (_isShowingCache) ...[
+                        const SizedBox(height: 8),
+                        const Text(
+                          'OFFLINE — CACHED DATA',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (_cachedAt != null)
+                          Text(
+                            'Last updated: ${_formatLastUpdated(_cachedAt!)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+
                       const SizedBox(height: 15),
                       Icon(
                         _weatherIcon(_currentWeather!.weatherCode),
@@ -305,7 +496,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // Forecast list
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -363,45 +553,38 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
+
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.favorite_border, color: Color(0xFF3198E8)),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Favorite cities will be added next.',
+                  child: _favoriteCities.isEmpty
+                      ? const Text(
+                          'No favorite cities yet. Tap the heart to add one.',
                           style: TextStyle(color: Colors.grey),
+                        )
+                      : Column(
+                          children: _favoriteCities.map((city) {
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(
+                                Icons.location_city,
+                                color: Color(0xFF3198E8),
+                              ),
+                              title: Text(city.name),
+                              subtitle: Text(city.country),
+                              onTap: () => _searchCity(city.name),
+                            );
+                          }).toList(),
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ],
           ),
         ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
-          NavigationDestination(
-            icon: Icon(Icons.favorite_border),
-            label: 'Favorites',
-          ),
-        ],
       ),
     );
   }
