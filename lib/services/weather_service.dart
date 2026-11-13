@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -12,7 +13,7 @@ class WeatherService {
 
   static const String _weatherUrl = 'https://api.open-meteo.com/v1/forecast';
 
-  static const Duration _requestTimeout = Duration(seconds: 10);
+  static const Duration _requestTimeout = Duration(seconds: 15);
 
   Future<LocationModel> searchCity(String city) async {
     if (city.trim().isEmpty) {
@@ -37,22 +38,17 @@ class WeatherService {
 
       final data = jsonDecode(response.body);
 
-      if (data['results'] == null || data['results'].isEmpty) {
+      if (data['results'] == null || (data['results'] as List).isEmpty) {
         throw Exception('City not found. Please try another name.');
       }
 
       return LocationModel.fromJson(data['results'][0]);
+    } on TimeoutException {
+      throw Exception('Request timed out. Please try again.');
     } on http.ClientException {
       throw Exception('Network error. Please check your connection.');
     } on FormatException {
       throw Exception('Invalid response received from the server.');
-    } on Exception {
-      rethrow;
-    } catch (error) {
-      if (error.toString().contains('TimeoutException')) {
-        throw Exception('Request timed out. Please try again.');
-      }
-      rethrow;
     }
   }
 
@@ -76,29 +72,48 @@ class WeatherService {
         throw Exception('Unable to load weather information.');
       }
 
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-      final currentWeather = WeatherModel.fromJson(data['current']);
+      if (data['current'] == null || data['daily'] == null) {
+        throw Exception('Weather information is incomplete.');
+      }
+
+      final currentWeather = WeatherModel.fromJson(
+        data['current'] as Map<String, dynamic>,
+      );
 
       final dailyData = data['daily'] as Map<String, dynamic>;
 
+      final dates = dailyData['time'] as List;
+      final codes = dailyData['weather_code'] as List;
+      final maximums = dailyData['temperature_2m_max'] as List;
+      final minimums = dailyData['temperature_2m_min'] as List;
+
+      final availableDays = [
+        dates.length,
+        codes.length,
+        maximums.length,
+        minimums.length,
+      ].reduce((a, b) => a < b ? a : b);
+
+      if (availableDays < 7) {
+        throw Exception(
+          'The weather service returned fewer than seven forecast days.',
+        );
+      }
+
       final forecast = List.generate(
-        (dailyData['time'] as List).length,
+        7,
         (index) => ForecastModel.fromJson(dailyData, index),
       );
 
       return {'current': currentWeather, 'forecast': forecast};
+    } on TimeoutException {
+      throw Exception('Weather request timed out. Please try again.');
     } on http.ClientException {
       throw Exception('Network error. Please check your connection.');
     } on FormatException {
       throw Exception('Invalid weather data received.');
-    } on Exception {
-      rethrow;
-    } catch (error) {
-      if (error.toString().contains('TimeoutException')) {
-        throw Exception('Weather request timed out. Please try again.');
-      }
-      rethrow;
     }
   }
 }

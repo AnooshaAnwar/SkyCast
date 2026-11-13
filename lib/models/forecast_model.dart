@@ -1,4 +1,3 @@
-
 class ForecastModel {
   final String date;
   final int weatherCode;
@@ -12,17 +11,17 @@ class ForecastModel {
     required this.minTemperature,
   });
 
-  factory ForecastModel.fromJson(
-    Map<String, dynamic> json,
-    int index,
-  ) {
+  factory ForecastModel.fromJson(Map<String, dynamic> json, int index) {
+    final dates = json['time'] as List;
+    final codes = json['weather_code'] as List;
+    final maximums = json['temperature_2m_max'] as List;
+    final minimums = json['temperature_2m_min'] as List;
+
     return ForecastModel(
-      date: json['time'][index],
-      weatherCode: json['weather_code'][index],
-      maxTemperature:
-          (json['temperature_2m_max'][index] as num).toDouble(),
-      minTemperature:
-          (json['temperature_2m_min'][index] as num).toDouble(),
+      date: dates[index].toString(),
+      weatherCode: (codes[index] as num).toInt(),
+      maxTemperature: (maximums[index] as num).toDouble(),
+      minTemperature: (minimums[index] as num).toDouble(),
     );
   }
 }
